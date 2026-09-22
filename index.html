@@ -940,6 +940,55 @@ main{padding:24px 28px 60px; background:var(--bg-soft); min-height:60vh}
       <div class="card col-12">
         <div class="section-header">
           <div>
+            <h2>Evolución mensual de horas por categoría</h2>
+            <div class="sub">Cantidad de horas efectivamente trabajadas mes a mes · complementa la vista en pesos porque no se ve afectada por ajustes salariales</div>
+          </div>
+        </div>
+        <div class="chart-wrap chart-mid"><canvas id="ch-horas-mensual"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Horas por empleado — vista comparativa YoY -->
+    <div class="row">
+      <div class="card col-12">
+        <div class="section-header">
+          <div>
+            <h2>Horas por empleado · período comparable</h2>
+            <div class="sub">Detalle YoY por trabajador · dominicales, nocturno ordinario y HE lado a lado · click en un nombre para el perfil completo</div>
+          </div>
+          <div class="filter-summary" id="tbl-horas-emp-meta"></div>
+        </div>
+        <div style="max-height:520px; overflow:auto; border:1px solid var(--gray-4); border-radius:8px">
+          <table class="tbl tbl-sortable" id="tbl-horas-emp">
+            <thead>
+              <tr>
+                <th style="width:24px">#</th>
+                <th class="sortable" data-sort="nombre">Empleado<span class="sort-ind"></span></th>
+                <th class="sortable" data-sort="sede">Sede<span class="sort-ind"></span></th>
+                <th class="sortable" data-sort="cargo">Cargo<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="dom26">Dominical h 2026<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="domYoY">Δ dom YoY<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="rno26">Nocturno h 2026<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="rnoYoY">Δ noct YoY<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="he26">HE h 2026<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="heYoY">Δ HE YoY<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="total26">Total h 2026<span class="sort-ind"></span></th>
+                <th class="num sortable" data-sort="totalYoY">Δ total YoY<span class="sort-ind"></span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div style="font-size:10.5px; color:var(--gray); margin-top:8px; font-style:italic">
+          Ordenado por total de horas 2026 (descendente). Click en cualquier encabezado para reordenar; click en empleado o sede para ver perfil detallado.
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card col-12">
+        <div class="section-header">
+          <div>
             <h2>Variación de recargos por sede · YoY</h2>
             <div class="sub">Impacto absoluto y porcentual del cambio de descanso por sede</div>
           </div>
@@ -1319,9 +1368,16 @@ main{padding:24px 28px 60px; background:var(--bg-soft); min-height:60vh}
           <div class="control-group">
             <label class="control-label">Vista</label>
             <div class="seg-control" id="matrix-mode">
-              <button class="seg-btn active" data-mode="valor">Valores COP</button>
+              <button class="seg-btn active" data-mode="valor">Valores</button>
               <button class="seg-btn" data-mode="mom">Δ mes-a-mes %</button>
               <button class="seg-btn" data-mode="comp">% del neto propio</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Unidad</label>
+            <div class="seg-control" id="matrix-unit">
+              <button class="seg-btn active" data-unit="cop">Pesos (COP)</button>
+              <button class="seg-btn" data-unit="horas">Horas</button>
             </div>
           </div>
           <div class="control-group control-right">
@@ -1750,10 +1806,23 @@ function renderAll(){
 
   const ddH25 = sumRecargosHoras(cmp.rec, [CAT_DD], 2025);
   const ddH26 = sumRecargosHoras(cmp.rec, [CAT_DD], 2026);
+  const dnH25 = sumRecargosHoras(cmp.rec, [CAT_DN], 2025);
+  const dnH26 = sumRecargosHoras(cmp.rec, [CAT_DN], 2026);
   const noH25 = sumRecargosHoras(cmp.rec, [CAT_NO], 2025);
   const noH26 = sumRecargosHoras(cmp.rec, [CAT_NO], 2026);
   const heH25 = sumRecargosHoras(cmp.rec, HE_IDXS, 2025);
   const heH26 = sumRecargosHoras(cmp.rec, HE_IDXS, 2026);
+  // dom horas = rdd + rnd + hedd + hend (consistente con "dom" en pesos)
+  const domH25 = sumRecargosHoras(cmp.rec, [CAT_DD, CAT_DN, ...HE_IDXS.filter(i => i===5 || i===6)], 2025);
+  const domH26 = sumRecargosHoras(cmp.rec, [CAT_DD, CAT_DN, ...HE_IDXS.filter(i => i===5 || i===6)], 2026);
+  // Helper: format hour delta compactly
+  const fmtHoras = h => (h == null ? '—' : Math.round(h).toLocaleString('es-CO') + ' h');
+  const fmtHorasVar = (h25, h26) => {
+    if(!h25 || h25 === 0) return `${fmtHoras(h26)} 2026`;
+    const pct = (h26 - h25) / h25;
+    const sign = pct >= 0 ? '+' : '';
+    return `${fmtHoras(h25)} → ${fmtHoras(h26)} · ${sign}${(pct*100).toFixed(1)}%`;
+  };
 
   const net25 = sumNetos(cmp.net, 2025);
   const net26 = sumNetos(cmp.net, 2026);
@@ -1798,20 +1867,21 @@ function renderAll(){
     mainPct: vDom,
     oldValue: fmtCOP(dom25), newValue: fmtCOP(dom26),
     semaforo: semaforoFor(vDom),
+    subDetail: `Horas: ${fmtHorasVar(domH25, domH26)}`
   });
   renderKpiCard('kpi-nocturno', {
     label:'Nocturno ordinario',
     mainPct: vNoct,
     oldValue: fmtCOP(no25), newValue: fmtCOP(no26),
     semaforo: vNoct > 0.10 ? 'warn' : (vNoct < -0.10 ? 'crit' : 'ok'),
-    subDetail: `${noH26 ? Math.round(noH26).toLocaleString('es-CO') : '0'} horas vs ${noH25 ? Math.round(noH25).toLocaleString('es-CO') : '0'} prev.`
+    subDetail: `Horas: ${fmtHorasVar(noH25, noH26)}`
   });
   renderKpiCard('kpi-extras', {
     label:'Horas extras (YoY)', tipKey:'he',
     mainPct: vHE,
     oldValue: fmtCOP(he25), newValue: fmtCOP(he26),
     semaforo: semaforoFor(vHE),
-    subDetail: `${heH26 ? Math.round(heH26).toLocaleString('es-CO') : '0'} horas extras 2026`
+    subDetail: `Horas: ${fmtHorasVar(heH25, heH26)}`
   });
   renderKpiCard('kpi-bono', {
     label:'Bono extralegal (YoY)', tipKey:'bono',
@@ -1946,28 +2016,31 @@ function renderAll(){
     label:'Dominical diurno', mainPct: vDD,
     oldValue: fmtCOP(dd25), newValue: fmtCOP(dd26),
     semaforo: semaforoFor(vDD),
-    subDetail: `${Math.round(ddH26).toLocaleString('es-CO')}h vs ${Math.round(ddH25).toLocaleString('es-CO')}h prev.`
+    subDetail: `Horas: ${fmtHorasVar(ddH25, ddH26)}`
   });
   renderKpiCard('kr-nd', {
     label:'Dominical nocturno', mainPct: vDN,
     oldValue: fmtCOP(dn25), newValue: fmtCOP(dn26),
     semaforo: semaforoFor(vDN),
+    subDetail: `Horas: ${fmtHorasVar(dnH25, dnH26)}`
   });
   renderKpiCard('kr-no', {
     label:'Nocturno ordinario', mainPct: vNoct,
     oldValue: fmtCOP(no25), newValue: fmtCOP(no26),
     semaforo: vNoct>0.20?'warn':'ok',
-    subDetail: `${Math.round(noH26).toLocaleString('es-CO')}h vs ${Math.round(noH25).toLocaleString('es-CO')}h prev.`
+    subDetail: `Horas: ${fmtHorasVar(noH25, noH26)}`
   });
   renderKpiCard('kr-he', {
     label:'Horas extras (total)', mainPct: vHE,
     oldValue: fmtCOP(he25), newValue: fmtCOP(he26),
     semaforo: semaforoFor(vHE),
-    subDetail: `${Math.round(heH26).toLocaleString('es-CO')}h totales`
+    subDetail: `Horas: ${fmtHorasVar(heH25, heH26)}`
   });
 
   renderRecargosCategoria(cmp);
   renderRecargosStack();
+  renderHorasMensuales();
+  renderHorasPorEmpleado();
   renderSedeImpact();
 
   const insights3 = [];
@@ -2358,6 +2431,169 @@ function renderRecargosStack(){
 }
 
 /* === Variación por sede === */
+function renderHorasMensuales(){
+  // Line chart: horas por mes por categoría (dom, nocturno ord, HE)
+  const kpis = DATA.kpis_mes.slice().sort((a,b) => a.y - b.y || a.m - b.m);
+  const labels = kpis.map(k => `${SHORT_MONTHS[k.m-1]} ${(k.y+'').slice(-2)}`);
+
+  // Aggregate hours per month per category from recargos rows (respect global filters)
+  const domH = {}, rnoH = {}, heH = {};
+  const domCatsArr = [CAT_DD, CAT_DN, ...HE_IDXS.filter(i => i===5 || i===6)];
+  for(const r of DATA.recargos){
+    const [ced, s, a, c, y, m, cat, valor, horas] = r;
+    if(!passDimFilter(s, a, c, ced)) continue;
+    const k = `${y}-${m}`;
+    if(domCatsArr.includes(cat)) domH[k] = (domH[k] || 0) + (horas || 0);
+    if(cat === CAT_NO)           rnoH[k] = (rnoH[k] || 0) + (horas || 0);
+    if(HE_IDXS.includes(cat))    heH[k]  = (heH[k]  || 0) + (horas || 0);
+  }
+  const domSeries = kpis.map(k => Math.round(domH[`${k.y}-${k.m}`] || 0));
+  const rnoSeries = kpis.map(k => Math.round(rnoH[`${k.y}-${k.m}`] || 0));
+  const heSeries  = kpis.map(k => Math.round(heH[`${k.y}-${k.m}`]  || 0));
+
+  setChart('ch-horas-mensual', {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Dominical/festivo (h)', data:domSeries,
+        borderColor:CHART_COLOR.orange, backgroundColor:CHART_COLOR.orange+'22',
+        tension:.3, borderWidth:2.5, pointRadius:2.5, pointHoverRadius:5 },
+      { label:'Nocturno ordinario (h)', data:rnoSeries,
+        borderColor:CHART_COLOR.ink, backgroundColor:CHART_COLOR.ink+'22',
+        tension:.3, borderWidth:2.5, pointRadius:2.5, pointHoverRadius:5 },
+      { label:'Horas extras (h)', data:heSeries,
+        borderColor:CHART_COLOR.gray, backgroundColor:CHART_COLOR.gray+'22',
+        tension:.3, borderWidth:2.5, pointRadius:2.5, pointHoverRadius:5,
+        borderDash:[6,3] },
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true, position:'bottom', labels:{boxWidth:14, padding:10, font:{size:11}}},
+        tooltip:{ callbacks:{ label: c => `${c.dataset.label}: ${c.raw.toLocaleString('es-CO')} h` }}
+      },
+      scales:{
+        x:chartGridX,
+        y:{...chartGrid, ticks:{...chartGrid.ticks, callback:v=>v.toLocaleString('es-CO')+' h'}, title:{display:true, text:'Horas por mes', font:{size:10}}}
+      }
+    }
+  });
+}
+
+let _horasEmpSort = { col: 'total26', dir: 'desc' };
+
+function renderHorasPorEmpleado(){
+  const cmpMonths = getCompareMonthsAvailable();
+  const domCatsArr = [CAT_DD, CAT_DN, ...HE_IDXS.filter(i => i===5 || i===6)];
+  const empMap = new Map(DATA.empleados.map(e => [e[0], e]));
+
+  // Agregar por empleado × año — solo período comparable, respetando filtros globales
+  const agg = {};  // ced -> {ced, dom25, dom26, rno25, rno26, he25, he26}
+  const ensure = (ced, s, a, c) => {
+    if(agg[ced]) return agg[ced];
+    if(!passDimFilter(s, a, c, ced)) return null;
+    const empRow = empMap.get(ced);
+    agg[ced] = {
+      ced,
+      nombre: empRow ? empRow[1] : '(sin nombre)',
+      sede:  empRow ? empRow[2] : s,
+      cargo: empRow ? empRow[4] : c,
+      dom25:0, dom26:0, rno25:0, rno26:0, he25:0, he26:0
+    };
+    return agg[ced];
+  };
+
+  for(const r of DATA.recargos){
+    const [ced, s, a, c, y, m, cat, val, horas] = r;
+    if(!cmpMonths.includes(m)) continue;
+    const e = ensure(ced, s, a, c);
+    if(!e) continue;
+    const h = horas || 0;
+    if(domCatsArr.includes(cat)){ if(y===2025) e.dom25 += h; else if(y===2026) e.dom26 += h; }
+    if(cat === CAT_NO){           if(y===2025) e.rno25 += h; else if(y===2026) e.rno26 += h; }
+    if(HE_IDXS.includes(cat)){    if(y===2025) e.he25 += h;  else if(y===2026) e.he26 += h; }
+  }
+
+  // Derived
+  const list = Object.values(agg).map(e => {
+    const total25 = e.dom25 + e.rno25 + e.he25;
+    const total26 = e.dom26 + e.rno26 + e.he26;
+    return {
+      ...e,
+      sedeName: DATA.sedes[e.sede] || '—',
+      cargoName: DATA.cargos[e.cargo] || '—',
+      total25, total26,
+      domYoY: e.dom25 > 0 ? (e.dom26 - e.dom25) / e.dom25 : (e.dom26 > 0 ? Infinity : null),
+      rnoYoY: e.rno25 > 0 ? (e.rno26 - e.rno25) / e.rno25 : (e.rno26 > 0 ? Infinity : null),
+      heYoY:  e.he25  > 0 ? (e.he26  - e.he25)  / e.he25  : (e.he26  > 0 ? Infinity : null),
+      totalYoY: total25 > 0 ? (total26 - total25) / total25 : (total26 > 0 ? Infinity : null),
+    };
+  }).filter(e => e.total25 > 0 || e.total26 > 0);
+
+  const {col, dir} = _horasEmpSort;
+  const keyFn = {
+    nombre:   r => r.nombre.toLowerCase(),
+    sede:     r => r.sedeName.toLowerCase(),
+    cargo:    r => r.cargoName.toLowerCase(),
+    dom26:    r => r.dom26,
+    domYoY:   r => r.domYoY == null ? -Infinity : (r.domYoY === Infinity ? 1e9 : r.domYoY),
+    rno26:    r => r.rno26,
+    rnoYoY:   r => r.rnoYoY == null ? -Infinity : (r.rnoYoY === Infinity ? 1e9 : r.rnoYoY),
+    he26:     r => r.he26,
+    heYoY:    r => r.heYoY == null ? -Infinity : (r.heYoY === Infinity ? 1e9 : r.heYoY),
+    total26:  r => r.total26,
+    totalYoY: r => r.totalYoY == null ? -Infinity : (r.totalYoY === Infinity ? 1e9 : r.totalYoY),
+  }[col] || (r => r.total26);
+
+  list.sort((a,b) => {
+    const ka = keyFn(a), kb = keyFn(b);
+    if(ka < kb) return dir === 'asc' ? -1 : 1;
+    if(ka > kb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  document.querySelectorAll('#tbl-horas-emp thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if(th.dataset.sort === col) th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+
+  const tbody = document.querySelector('#tbl-horas-emp tbody');
+  const maxRows = 100;
+  const slice = list.slice(0, maxRows);
+
+  const fmtH = h => h > 0 ? Math.round(h).toLocaleString('es-CO') + ' h' : '—';
+  const fmtYoYh = v => {
+    if(v == null) return '—';
+    if(v === Infinity) return '<span class="pos-strong">nuevo</span>';
+    const sign = v >= 0 ? '+' : '';
+    const cls = v <= -0.30 ? 'neg' : (v <= -0.10 ? 'warn' : (v >= 0.20 ? 'pos-strong' : ''));
+    return `<span class="${cls}">${sign}${(v*100).toFixed(0)}%</span>`;
+  };
+
+  if(slice.length === 0){
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--gray)">Sin empleados con horas registradas bajo el filtro actual.</td></tr>';
+  } else {
+    tbody.innerHTML = slice.map((e, i) => `
+      <tr>
+        <td class="num" style="color:var(--gray-2);font-size:11px">${i+1}</td>
+        <td><span class="link-drill link-emp" data-ced="${e.ced}">${escapeHtml(e.nombre)}</span></td>
+        <td><span class="link-drill link-sede" data-sede-idx="${e.sede}"><span class="tag">${escapeHtml(e.sedeName)}</span></span></td>
+        <td><span class="link-drill link-cargo" data-cargo-idx="${e.cargo}">${escapeHtml(e.cargoName)}</span></td>
+        <td class="num">${fmtH(e.dom26)}</td>
+        <td class="num">${fmtYoYh(e.domYoY)}</td>
+        <td class="num">${fmtH(e.rno26)}</td>
+        <td class="num">${fmtYoYh(e.rnoYoY)}</td>
+        <td class="num">${fmtH(e.he26)}</td>
+        <td class="num">${fmtYoYh(e.heYoY)}</td>
+        <td class="num" style="font-weight:600">${fmtH(e.total26)}</td>
+        <td class="num">${fmtYoYh(e.totalYoY)}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('tbl-horas-emp-meta').innerHTML =
+    `<strong>${list.length}</strong> empleados con horas · ${maxRows < list.length ? 'top ' + maxRows : 'todos'} mostrados`;
+}
+
 function renderSedeImpact(){
   const rec = recargosFiltered();
   const months = getCompareMonths();
@@ -3418,6 +3654,7 @@ function renderVolatilidad(emp){
 const MATRIX_STATE = {
   metric: 'neto',    // 'neto' | 'dom' | 'rno' | 'he' | 'bono'
   mode:   'valor',   // 'valor' | 'mom' | 'comp'
+  unit:   'cop',     // 'cop' | 'horas' (aplica solo a métricas de recargos: dom, rno, he)
   expanded: new Set() // sede indices that are expanded
 };
 let _hostalesSort = { col: 'score', dir: 'desc' };
@@ -3441,7 +3678,10 @@ function buildDetalleData(){
       sede: empRow ? empRow[2] : sedeIdx,
       area: empRow ? empRow[3] : areaIdx,
       cargo: empRow ? empRow[4] : cargoIdx,
-      neto:{}, dom:{}, rno:{}, he:{}, bono:{}, totalRec:{}
+      // Valores en pesos
+      neto:{}, dom:{}, rno:{}, he:{}, bono:{}, totalRec:{},
+      // Horas (paralelas, sólo para métricas de recargos)
+      domH:{}, rnoH:{}, heH:{}
     };
     return empData[ced];
   };
@@ -3453,15 +3693,15 @@ function buildDetalleData(){
     if(!e) continue;
     e.neto[`${y}-${m}`] = v;
   }
-  // Recargos por categoría
+  // Recargos por categoría — valores y horas
   for(const r of DATA.recargos){
-    const [ced, s, a, c, y, m, cat, v] = r;
+    const [ced, s, a, c, y, m, cat, v, horas] = r;
     const e = ensure(ced, s, a, c);
     if(!e) continue;
     const k = `${y}-${m}`;
-    if(DOM_CATS.includes(cat)) e.dom[k] = (e.dom[k] || 0) + v;
-    if(cat === 2)              e.rno[k] = (e.rno[k] || 0) + v;
-    if(HE_CATS.includes(cat))  e.he[k]  = (e.he[k]  || 0) + v;
+    if(DOM_CATS.includes(cat)){ e.dom[k]  = (e.dom[k]  || 0) + v; e.domH[k] = (e.domH[k] || 0) + (horas||0); }
+    if(cat === 2){             e.rno[k]  = (e.rno[k]  || 0) + v; e.rnoH[k] = (e.rnoH[k] || 0) + (horas||0); }
+    if(HE_CATS.includes(cat)){ e.he[k]   = (e.he[k]   || 0) + v; e.heH[k]  = (e.heH[k]  || 0) + (horas||0); }
   }
   // Bonos
   for(const r of DATA.bonos){
@@ -3646,33 +3886,53 @@ function updateMatrixHint(){
     he:   'horas extras (diurnas y nocturnas, ordinarias y dominicales)',
     bono: 'bono extralegal',
   };
+  const isRecargoMetric = ['dom','rno','he'].includes(MATRIX_STATE.metric);
+  const unitExpl = MATRIX_STATE.unit === 'horas' && isRecargoMetric
+    ? ' <span style="background:var(--orange-soft);color:var(--orange-deep);padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">en horas</span>'
+    : '';
+  const unitOverride = MATRIX_STATE.unit === 'horas' && isRecargoMetric
+    ? `Los valores están expresados en <strong>horas</strong> · útil para separar el impacto operacional real del efecto de los ajustes salariales.`
+    : null;
   const modeExpl = {
-    valor: `Cada celda muestra el <strong>valor en pesos</strong> del empleado para ese mes. Celdas vacías = el empleado no aparece en nómina ese mes.`,
-    mom:   `Cada celda muestra el <strong>cambio porcentual mes-a-mes</strong>. Verde = subió, rojo = bajó, gris = plano. Útil para detectar en qué mes específico se produjo un cambio.`,
-    comp:  `Cada celda muestra qué <strong>% del neto del empleado ese mes</strong> viene de esta métrica. Útil para ver la dependencia de cada persona a un tipo de pago.`,
+    valor: unitOverride || `Cada celda muestra el <strong>valor en pesos</strong> del empleado para ese mes. Celdas vacías = el empleado no aparece en nómina ese mes.`,
+    mom:   `Cada celda muestra el <strong>cambio porcentual mes-a-mes</strong> ${MATRIX_STATE.unit === 'horas' && isRecargoMetric ? 'de horas' : ''}. Verde = subió, rojo = bajó, gris = plano.`,
+    comp:  MATRIX_STATE.unit === 'horas' && isRecargoMetric
+      ? `Composición no aplica a horas — mostrando <strong>valor en horas</strong> directo.`
+      : `Cada celda muestra qué <strong>% del neto del empleado ese mes</strong> viene de esta métrica. Útil para ver la dependencia de cada persona a un tipo de pago.`,
   };
+  if(!isRecargoMetric && MATRIX_STATE.unit === 'horas'){
+    // Métricas Neto/Bono no tienen equivalente en horas — aviso
+    document.getElementById('matrix-hint').innerHTML =
+      `<strong>${metricLabels[MATRIX_STATE.metric]}</strong>${unitExpl} · <span style="color:var(--gray)">Esta métrica no se mide en horas; mostrando en pesos.</span>`;
+    return;
+  }
   const el = document.getElementById('matrix-hint');
-  if(el) el.innerHTML = `<strong>${metricLabels[MATRIX_STATE.metric]}</strong> · ${modeExpl[MATRIX_STATE.mode]}`;
+  if(el) el.innerHTML = `<strong>${metricLabels[MATRIX_STATE.metric]}</strong>${unitExpl} · ${modeExpl[MATRIX_STATE.mode]}`;
 }
 
-/* === Format cell value based on metric + mode === */
+/* === Format cell value based on metric + mode + unit === */
 function formatMatrixCell(empRow, y, m, prevYm){
   const key = `${y}-${m}`;
   const metric = MATRIX_STATE.metric;
   const mode = MATRIX_STATE.mode;
-  const val = empRow[metric][key];
+  const unit = MATRIX_STATE.unit;
+
+  // Unidad "horas" solo aplica a métricas de recargos (dom, rno, he). Netos y bono siempre en pesos.
+  const useHoras = unit === 'horas' && ['dom','rno','he'].includes(metric);
+  const dataKey  = useHoras ? metric + 'H' : metric;  // e.g. 'domH' vs 'dom'
+  const val = (empRow[dataKey] || {})[key];
+  const fmtVal = v => useHoras ? (Math.round(v).toLocaleString('es-CO') + ' h') : fmtCOP(v);
 
   if(mode === 'valor'){
     if(val == null || val === 0) return { html: '—', cls: 'cell-empty' };
-    return { html: fmtCOP(val), cls: 'cell-value' };
+    return { html: fmtVal(val), cls: 'cell-value' };
   }
 
   if(mode === 'mom'){
-    // Requires previous month
     if(prevYm == null){
-      return { html: val != null ? fmtCOP(val) : '—', cls: val != null ? 'cell-value' : 'cell-empty' };
+      return { html: val != null ? fmtVal(val) : '—', cls: val != null ? 'cell-value' : 'cell-empty' };
     }
-    const prev = empRow[metric][prevYm];
+    const prev = (empRow[dataKey] || {})[prevYm];
     if(val == null && prev == null) return { html: '—', cls: 'cell-empty' };
     if(prev == null || prev === 0){
       return val > 0 ? { html: 'nuevo', cls: 'cell-mom-up' } : { html: '—', cls: 'cell-empty' };
@@ -3688,6 +3948,10 @@ function formatMatrixCell(empRow, y, m, prevYm){
 
   if(mode === 'comp'){
     if(metric === 'neto') return { html: '100%', cls: 'cell-value' };
+    // "% del neto propio" solo tiene sentido en pesos (comparar horas con COP no da)
+    if(useHoras){
+      return { html: val > 0 ? fmtVal(val) : '—', cls: val > 0 ? 'cell-value' : 'cell-empty' };
+    }
     if(val == null || val === 0) return { html: '—', cls: 'cell-empty' };
     const neto = empRow.neto[key];
     if(!neto || neto <= 0) return { html: '—', cls: 'cell-empty' };
@@ -3701,9 +3965,11 @@ function formatMatrixCell(empRow, y, m, prevYm){
 /* === Aggregate summary per hostal for group header === */
 function summarizeGroup(empList){
   const metric = MATRIX_STATE.metric;
+  const useHoras = MATRIX_STATE.unit === 'horas' && ['dom','rno','he'].includes(metric);
+  const dataKey = useHoras ? metric + 'H' : metric;
   const totals = {};
   empList.forEach(e => {
-    Object.entries(e[metric] || {}).forEach(([k, v]) => {
+    Object.entries(e[dataKey] || {}).forEach(([k, v]) => {
       totals[k] = (totals[k] || 0) + v;
     });
   });
@@ -3713,6 +3979,7 @@ function summarizeGroup(empList){
     empCount: empList.length,
     total: totalSum,
     avgPerMonth: values.length ? totalSum / values.length : 0,
+    useHoras: useHoras
   };
 }
 
@@ -3742,34 +4009,34 @@ function renderMatrix(){
     const isExpanded = MATRIX_STATE.expanded.has(s.sedeIdx);
     const summary = summarizeGroup(s.empleados);
     const metricLabel = { neto:'Neto', dom:'Dominical/festivo', rno:'Nocturno ord.', he:'HE', bono:'Bono' }[MATRIX_STATE.metric];
+    const useHoras = MATRIX_STATE.unit === 'horas' && ['dom','rno','he'].includes(MATRIX_STATE.metric);
+    const dataKey  = useHoras ? MATRIX_STATE.metric + 'H' : MATRIX_STATE.metric;
+    const fmtTotal = v => useHoras ? (Math.round(v).toLocaleString('es-CO') + ' h') : fmtCOP(v);
 
     // Group header row (with monthly totals for the metric in header cells)
     const monthTotals = months.map(([y,m]) => {
       const key = `${y}-${m}`;
-      const sum = s.empleados.reduce((acc, e) => acc + (e[MATRIX_STATE.metric][key] || 0), 0);
-      if(MATRIX_STATE.mode === 'valor') return `<td class="month-col">${sum > 0 ? fmtCOP(sum) : '—'}</td>`;
+      const sum = s.empleados.reduce((acc, e) => acc + ((e[dataKey] || {})[key] || 0), 0);
+      if(MATRIX_STATE.mode === 'valor') return `<td class="month-col">${sum > 0 ? fmtTotal(sum) : '—'}</td>`;
       if(MATRIX_STATE.mode === 'mom'){
-        // Compare with previous month total
-        const prevKey = months.indexOf([y,m].join('-')) > 0 ? null : null;
-        // Simpler: compute prev
         const idx = months.findIndex(x => x[0]===y && x[1]===m);
-        if(idx <= 0) return `<td class="month-col">${sum > 0 ? fmtCOP(sum) : '—'}</td>`;
+        if(idx <= 0) return `<td class="month-col">${sum > 0 ? fmtTotal(sum) : '—'}</td>`;
         const [py, pm] = months[idx-1];
-        const prevSum = s.empleados.reduce((acc, e) => acc + (e[MATRIX_STATE.metric][`${py}-${pm}`] || 0), 0);
+        const prevSum = s.empleados.reduce((acc, e) => acc + ((e[dataKey] || {})[`${py}-${pm}`] || 0), 0);
         if(!prevSum) return `<td class="month-col">—</td>`;
         const delta = (sum-prevSum)/prevSum;
         const cls = Math.abs(delta) < 0.05 ? 'cell-mom-flat' : (delta > 0 ? 'cell-mom-up' : 'cell-mom-down');
         return `<td class="month-col ${cls}">${fmtPct(delta, 0)}</td>`;
       }
-      // comp mode: show sum as absolute (composition per empleado is at row level)
-      return `<td class="month-col">${sum > 0 ? fmtCOP(sum) : '—'}</td>`;
+      // comp mode: show sum as absolute
+      return `<td class="month-col">${sum > 0 ? fmtTotal(sum) : '—'}</td>`;
     }).join('');
 
     rows.push(`<tr class="grp-hdr" data-sede="${s.sedeIdx}">
       <th class="first-col">
         <span class="grp-caret">${isExpanded ? '▼' : '▶'}</span>
         ${escapeHtml(s.name)}
-        <span class="grp-summary">${summary.empCount} empleados · Total ${metricLabel}: ${fmtCOP(summary.total)}</span>
+        <span class="grp-summary">${summary.empCount} empleados · Total ${metricLabel}: ${fmtTotal(summary.total)}</span>
       </th>
       ${monthTotals}
     </tr>`);
@@ -3874,8 +4141,9 @@ function showEmpleadoProfile(ced){
   for(const r of DATA.recargos){
     if(r[0] !== ced) continue;
     const k = `${r[4]}-${r[5]}`;
-    if(!recByYmCat[k]) recByYmCat[k] = {};
-    recByYmCat[k][r[6]] = (recByYmCat[k][r[6]] || 0) + r[7];
+    if(!recByYmCat[k]) recByYmCat[k] = { valor:{}, horas:{} };
+    recByYmCat[k].valor[r[6]] = (recByYmCat[k].valor[r[6]] || 0) + r[7];
+    recByYmCat[k].horas[r[6]] = (recByYmCat[k].horas[r[6]] || 0) + (r[8] || 0);
   }
   for(const r of DATA.bonos){
     if(r[0] !== ced) continue;
@@ -3917,7 +4185,7 @@ function showEmpleadoProfile(ced){
   const tableRows = monthsWithData.map(([y,m]) => {
     const k = `${y}-${m}`;
     const neto = netoByYm[k] || 0;
-    const cats = recByYmCat[k] || {};
+    const cats = (recByYmCat[k] && recByYmCat[k].valor) || {};
     const dom  = (cats[0]||0) + (cats[1]||0) + (cats[5]||0) + (cats[6]||0);
     const rno  = cats[2] || 0;
     const he   = (cats[3]||0) + (cats[4]||0) + (cats[5]||0) + (cats[6]||0);
@@ -3985,6 +4253,42 @@ function showEmpleadoProfile(ced){
       </table>
     </div>
 
+    <div class="modal-section">
+      <div class="modal-section-title">Horas trabajadas por categoría · últimos ${monthsWithData.length} meses</div>
+      <table class="modal-mini-tbl">
+        <thead>
+          <tr>
+            <th>Mes</th>
+            <th class="num">Dominical/festivo</th>
+            <th class="num">Nocturno ord.</th>
+            <th class="num">Horas extras</th>
+            <th class="num">Total horas</th>
+          </tr>
+        </thead>
+        <tbody>${(() => {
+          return monthsWithData.map(([y,m]) => {
+            const k = `${y}-${m}`;
+            const catsH = (recByYmCat[k] && recByYmCat[k].horas) || {};
+            const domH = (catsH[0]||0) + (catsH[1]||0) + (catsH[5]||0) + (catsH[6]||0);
+            const rnoH = catsH[2] || 0;
+            const heH  = (catsH[3]||0) + (catsH[4]||0) + (catsH[5]||0) + (catsH[6]||0);
+            const total = domH + rnoH + heH;
+            const fh = h => h > 0 ? Math.round(h).toLocaleString('es-CO') + ' h' : '—';
+            return `<tr>
+              <td>${SHORT_MONTHS[m-1]} ${y}</td>
+              <td class="num">${fh(domH)}</td>
+              <td class="num">${fh(rnoH)}</td>
+              <td class="num">${fh(heH)}</td>
+              <td class="num" style="font-weight:600">${fh(total)}</td>
+            </tr>`;
+          }).join('');
+        })()}</tbody>
+      </table>
+      <div style="font-size:10.5px; color:var(--gray); margin-top:6px; font-style:italic">
+        Ver esto en horas ayuda a separar la variación operativa real del efecto de ajustes salariales.
+      </div>
+    </div>
+
     ${buildEmpleadoAlerts(yoy, cv, pctVariable, allNetos.length)}
   `;
 
@@ -4049,7 +4353,7 @@ function renderEmpleadoCompChart(netoByYm, recByYmCat, bonoByYm, allMonths){
   const dom = [], rno = [], he = [], bono = [], base = [];
   active.forEach(([y,m]) => {
     const k = `${y}-${m}`;
-    const cats = recByYmCat[k] || {};
+    const cats = (recByYmCat[k] && recByYmCat[k].valor) || {};
     const d = (cats[0]||0)+(cats[1]||0)+(cats[5]||0)+(cats[6]||0);
     const r = cats[2] || 0;
     const h = (cats[3]||0)+(cats[4]||0)+(cats[5]||0)+(cats[6]||0);
@@ -4722,6 +5026,21 @@ function wireEvents(){
     });
   });
 
+  // Sortable headers · Recargos > Horas por empleado
+  document.querySelectorAll('#tbl-horas-emp thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if(_horasEmpSort.col === col){
+        _horasEmpSort.dir = _horasEmpSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _horasEmpSort.col = col;
+        const isNumeric = ['dom26','domYoY','rno26','rnoYoY','he26','heYoY','total26','totalYoY'].includes(col);
+        _horasEmpSort.dir = isNumeric ? 'desc' : 'asc';
+      }
+      renderHorasPorEmpleado();
+    });
+  });
+
   // Sortable headers · Diagnóstico > Volatilidad
   document.querySelectorAll('#tbl-volatilidad thead th.sortable').forEach(th => {
     th.addEventListener('click', () => {
@@ -4771,6 +5090,17 @@ function wireEvents(){
       document.querySelectorAll('#matrix-mode .seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       MATRIX_STATE.mode = btn.dataset.mode;
+      updateMatrixHint();
+      renderMatrix();
+    });
+  });
+
+  // Unit switcher (COP / Horas)
+  document.querySelectorAll('#matrix-unit .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#matrix-unit .seg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      MATRIX_STATE.unit = btn.dataset.unit;
       updateMatrixHint();
       renderMatrix();
     });
